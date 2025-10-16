@@ -31,7 +31,7 @@ app.add_middleware(
         "http://localhost:3000", 
         "http://localhost:5173",
         "https://*.vercel.app",  
-        "https://your-frontend-domain.vercel.app"  
+        "https://skinsync-frontend-xogt.vercel.app", 
     ],
     allow_credentials=True,
     allow_methods=["*"],
