@@ -24,19 +24,13 @@ load_dotenv()
 
 app = FastAPI()
 
-# Configure CORS
+# Simple CORS configuration - allow all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000", 
-        "http://localhost:5173", 
-        "https://skinsync-frontend-xogt.vercel.app",
-        "https://skinsync-frontend-xogt.vercel.app/",  
-        "https://*.vercel.app"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=False,  # Must be False when using allow_origins=["*"]
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
 )
 
 # Configure Gemini
@@ -126,8 +120,8 @@ def root():
             "fetch_ingredients": "POST /api/fetch-ingredients",
             "analyze": "POST /api/analyze-compatibility",
             "conflicts": "/api/conflicts",
-            "generate_review": "POST /api/generate-review",  # NEW
-            "product_image": "GET /api/product-image?product_name=..."  # NEW
+            "generate_review": "POST /api/generate-review",
+            "product_image": "GET /api/product-image?product_name=..."
         }
     }
 
@@ -237,7 +231,7 @@ Important: Return ONLY the JSON object, nothing else."""
             detail=f"Error fetching ingredients: {str(e)}"
         )
 
- #GENERATE PRODUCT REVIEW ENDPOINT
+# ===== GENERATE PRODUCT REVIEW ENDPOINT =====
 @app.post("/api/generate-review")
 async def generate_review(request: ReviewRequest):
     """Generate AI-powered product review based on skin type"""
@@ -302,8 +296,8 @@ Make it sound like advice from a knowledgeable friend. Be specific and helpful."
             status_code=500,
             detail=f"Failed to generate review: {str(e)}"
         )
-    
-# FETCH PRODUCT IMAGE ENDPOINT
+
+# ===== FETCH PRODUCT IMAGE ENDPOINT =====
 @app.get("/api/product-image")
 async def get_product_image(product_name: str):
     """Fetch product image from Google Custom Search"""
@@ -331,7 +325,7 @@ async def get_product_image(product_name: str):
     except Exception as e:
         logger.error(f"❌ Error fetching image: {str(e)}")
         return {"imageUrl": None}
-    
+
 # ===== ANALYZE COMPATIBILITY ENDPOINT =====
 @app.post("/api/analyze-compatibility")
 async def analyze_compatibility(request: CompatibilityRequest) -> AnalysisResponse:
@@ -450,176 +444,177 @@ Return ONLY valid JSON, no markdown or extra text:
 def get_conflicts() -> List[ConflictItem]:
     """Get all known ingredient conflicts"""
     conflicts = [
-    # === Retinol Conflicts ===
-      {
-          "ingredient1": "Retinol",
-          "ingredient2": "AHA",
-          "severity": "warning",
-          "reason": "Over-exfoliation risk - can irritate and damage skin barrier"
-      },
-      {
-          "ingredient1": "Retinol",
-          "ingredient2": "BHA",
-          "severity": "warning",
-          "reason": "Over-exfoliation risk - can irritate and damage skin barrier"
-      },
-      {
-          "ingredient1": "Retinol",
-          "ingredient2": "Salicylic Acid",
-          "severity": "warning",
-          "reason": "Over-exfoliation risk - severe irritation possible"
-      },
-      {
-          "ingredient1": "Retinol",
-          "ingredient2": "Benzoyl Peroxide",
-          "severity": "warning",
-          "reason": "Benzoyl peroxide oxidizes and degrades retinoids - neutralizes effects and increases irritation"
-      },
-      {
-          "ingredient1": "Retinol",
-          "ingredient2": "Vitamin C",
-          "severity": "warning",
-          "reason": "Both are strong actives - can cause irritation and sensitivity when combined, best used at different times"
-      },
-      
-      # === Vitamin C Conflicts ===
-      {
-          "ingredient1": "Vitamin C",
-          "ingredient2": "Niacinamide",
-          "severity": "info",
-          "reason": "Myth debunked - actually works well together and provides additional benefits"
-      },
-      {
-          "ingredient1": "Vitamin C",
-          "ingredient2": "Salicylic Acid",
-          "severity": "caution",
-          "reason": "Multiple actives - may over-exfoliate and irritate skin"
-      },
-      {
-          "ingredient1": "Vitamin C",
-          "ingredient2": "AHA",
-          "severity": "caution",
-          "reason": "Too many actives - risk of over-exfoliation and barrier damage"
-      },
-      {
-          "ingredient1": "Vitamin C",
-          "ingredient2": "BHA",
-          "severity": "caution",
-          "reason": "Too many actives - risk of over-exfoliation and barrier damage"
-      },
-      {
-          "ingredient1": "Vitamin C",
-          "ingredient2": "Benzoyl Peroxide",
-          "severity": "warning",
-          "reason": "Benzoyl peroxide oxidizes and degrades vitamin C - cancels out antioxidant benefits"
-      },
-      
-      # === Benzoyl Peroxide Conflicts ===
-      {
-          "ingredient1": "Benzoyl Peroxide",
-          "ingredient2": "Glycolic Acid",
-          "severity": "caution",
-          "reason": "Both are potentially irritating - combined use increases sensitivity risk"
-      },
-      {
-          "ingredient1": "Benzoyl Peroxide",
-          "ingredient2": "Hydroquinone",
-          "severity": "warning",
-          "reason": "Can cause temporary dark staining or discoloration of the skin - avoid layering"
-      },
-      {
-          "ingredient1": "Benzoyl Peroxide",
-          "ingredient2": "Dapsone",
-          "severity": "warning",
-          "reason": "Can cause temporary orange or brown skin discoloration"
-      },
-      
-      # === AHA/BHA Conflicts ===
-      {
-          "ingredient1": "AHA",
-          "ingredient2": "Salicylic Acid",
-          "severity": "caution",
-          "reason": "Too much exfoliation - can compromise skin barrier"
-      },
-      {
-          "ingredient1": "AHA",
-          "ingredient2": "BHA",
-          "severity": "caution",
-          "reason": "Combining multiple exfoliants can lead to over-exfoliation and irritation"
-      },
-      
-      # === Copper Peptides Conflicts ===
-      {
-          "ingredient1": "Copper Peptides",
-          "ingredient2": "Vitamin C",
-          "severity": "warning",
-          "reason": "Ascorbic acid can destabilize copper peptides and reduce effectiveness - use at different times"
-      },
-      {
-          "ingredient1": "Copper Peptides",
-          "ingredient2": "AHA",
-          "severity": "warning",
-          "reason": "Low pH acids can destabilize peptides and reduce their effectiveness - best used separately"
-      },
-      {
-          "ingredient1": "Copper Peptides",
-          "ingredient2": "BHA",
-          "severity": "warning",
-          "reason": "Low pH acids can destabilize peptides and reduce their effectiveness - best used separately"
-      },
-      
-      # === Hydroquinone Conflicts ===
-      {
-          "ingredient1": "Hydroquinone",
-          "ingredient2": "AHA",
-          "severity": "caution",
-          "reason": "Both are potent actives that can irritate when combined - use at different times or consider alternatives"
-      },
-      {
-          "ingredient1": "Hydroquinone",
-          "ingredient2": "BHA",
-          "severity": "caution",
-          "reason": "Both are potent actives that can irritate when combined - use at different times"
-      },
-      
-      # === Niacinamide Conflicts ===
-      {
-          "ingredient1": "Niacinamide",
-          "ingredient2": "Vitamin C",
-          "severity": "info",
-          "reason": "Old myth - these actually work synergistically when formulated properly"
-      },
-      # === More Important Conflicts ===
-      {
-          "ingredient1": "Tretinoin",
-          "ingredient2": "AHA",
-          "severity": "warning",
-          "reason": "Both increase cell turnover - high risk of severe irritation and barrier damage"
-      },
-      {
-          "ingredient1": "Tretinoin",
-          "ingredient2": "BHA",
-          "severity": "warning",
-          "reason": "Both increase cell turnover - high risk of severe irritation"
-      },
-      {
-          "ingredient1": "Alpha Arbutin",
-          "ingredient2": "AHA",
-          "severity": "caution",
-          "reason": "AHAs can enhance absorption but may cause irritation - introduce slowly"
-      },
-      {
-          "ingredient1": "Azelaic Acid",
-          "ingredient2": "AHA",
-          "severity": "caution",
-          "reason": "Multiple acids can over-exfoliate - consider alternating days"
-      },
-      {
-          "ingredient1": "Zinc Oxide",
-          "ingredient2": "Salicylic Acid",
-          "severity": "caution",
-          "reason": "May reduce effectiveness of both ingredients - use at different times"
-      }
+        # === Retinol Conflicts ===
+        {
+            "ingredient1": "Retinol",
+            "ingredient2": "AHA",
+            "severity": "warning",
+            "reason": "Over-exfoliation risk - can irritate and damage skin barrier"
+        },
+        {
+            "ingredient1": "Retinol",
+            "ingredient2": "BHA",
+            "severity": "warning",
+            "reason": "Over-exfoliation risk - can irritate and damage skin barrier"
+        },
+        {
+            "ingredient1": "Retinol",
+            "ingredient2": "Salicylic Acid",
+            "severity": "warning",
+            "reason": "Over-exfoliation risk - severe irritation possible"
+        },
+        {
+            "ingredient1": "Retinol",
+            "ingredient2": "Benzoyl Peroxide",
+            "severity": "warning",
+            "reason": "Benzoyl peroxide oxidizes and degrades retinoids - neutralizes effects and increases irritation"
+        },
+        {
+            "ingredient1": "Retinol",
+            "ingredient2": "Vitamin C",
+            "severity": "warning",
+            "reason": "Both are strong actives - can cause irritation and sensitivity when combined, best used at different times"
+        },
+        
+        # === Vitamin C Conflicts ===
+        {
+            "ingredient1": "Vitamin C",
+            "ingredient2": "Niacinamide",
+            "severity": "info",
+            "reason": "Myth debunked - actually works well together and provides additional benefits"
+        },
+        {
+            "ingredient1": "Vitamin C",
+            "ingredient2": "Salicylic Acid",
+            "severity": "caution",
+            "reason": "Multiple actives - may over-exfoliate and irritate skin"
+        },
+        {
+            "ingredient1": "Vitamin C",
+            "ingredient2": "AHA",
+            "severity": "caution",
+            "reason": "Too many actives - risk of over-exfoliation and barrier damage"
+        },
+        {
+            "ingredient1": "Vitamin C",
+            "ingredient2": "BHA",
+            "severity": "caution",
+            "reason": "Too many actives - risk of over-exfoliation and barrier damage"
+        },
+        {
+            "ingredient1": "Vitamin C",
+            "ingredient2": "Benzoyl Peroxide",
+            "severity": "warning",
+            "reason": "Benzoyl peroxide oxidizes and degrades vitamin C - cancels out antioxidant benefits"
+        },
+        
+        # === Benzoyl Peroxide Conflicts ===
+        {
+            "ingredient1": "Benzoyl Peroxide",
+            "ingredient2": "Glycolic Acid",
+            "severity": "caution",
+            "reason": "Both are potentially irritating - combined use increases sensitivity risk"
+        },
+        {
+            "ingredient1": "Benzoyl Peroxide",
+            "ingredient2": "Hydroquinone",
+            "severity": "warning",
+            "reason": "Can cause temporary dark staining or discoloration of the skin - avoid layering"
+        },
+        {
+            "ingredient1": "Benzoyl Peroxide",
+            "ingredient2": "Dapsone",
+            "severity": "warning",
+            "reason": "Can cause temporary orange or brown skin discoloration"
+        },
+        
+        # === AHA/BHA Conflicts ===
+        {
+            "ingredient1": "AHA",
+            "ingredient2": "Salicylic Acid",
+            "severity": "caution",
+            "reason": "Too much exfoliation - can compromise skin barrier"
+        },
+        {
+            "ingredient1": "AHA",
+            "ingredient2": "BHA",
+            "severity": "caution",
+            "reason": "Combining multiple exfoliants can lead to over-exfoliation and irritation"
+        },
+        
+        # === Copper Peptides Conflicts ===
+        {
+            "ingredient1": "Copper Peptides",
+            "ingredient2": "Vitamin C",
+            "severity": "warning",
+            "reason": "Ascorbic acid can destabilize copper peptides and reduce effectiveness - use at different times"
+        },
+        {
+            "ingredient1": "Copper Peptides",
+            "ingredient2": "AHA",
+            "severity": "warning",
+            "reason": "Low pH acids can destabilize peptides and reduce their effectiveness - best used separately"
+        },
+        {
+            "ingredient1": "Copper Peptides",
+            "ingredient2": "BHA",
+            "severity": "warning",
+            "reason": "Low pH acids can destabilize peptides and reduce their effectiveness - best used separately"
+        },
+        
+        # === Hydroquinone Conflicts ===
+        {
+            "ingredient1": "Hydroquinone",
+            "ingredient2": "AHA",
+            "severity": "caution",
+            "reason": "Both are potent actives that can irritate when combined - use at different times or consider alternatives"
+        },
+        {
+            "ingredient1": "Hydroquinone",
+            "ingredient2": "BHA",
+            "severity": "caution",
+            "reason": "Both are potent actives that can irritate when combined - use at different times"
+        },
+        
+        # === Niacinamide Conflicts ===
+        {
+            "ingredient1": "Niacinamide",
+            "ingredient2": "Vitamin C",
+            "severity": "info",
+            "reason": "Old myth - these actually work synergistically when formulated properly"
+        },
+        
+        # === More Important Conflicts ===
+        {
+            "ingredient1": "Tretinoin",
+            "ingredient2": "AHA",
+            "severity": "warning",
+            "reason": "Both increase cell turnover - high risk of severe irritation and barrier damage"
+        },
+        {
+            "ingredient1": "Tretinoin",
+            "ingredient2": "BHA",
+            "severity": "warning",
+            "reason": "Both increase cell turnover - high risk of severe irritation"
+        },
+        {
+            "ingredient1": "Alpha Arbutin",
+            "ingredient2": "AHA",
+            "severity": "caution",
+            "reason": "AHAs can enhance absorption but may cause irritation - introduce slowly"
+        },
+        {
+            "ingredient1": "Azelaic Acid",
+            "ingredient2": "AHA",
+            "severity": "caution",
+            "reason": "Multiple acids can over-exfoliate - consider alternating days"
+        },
+        {
+            "ingredient1": "Zinc Oxide",
+            "ingredient2": "Salicylic Acid",
+            "severity": "caution",
+            "reason": "May reduce effectiveness of both ingredients - use at different times"
+        }
     ]
     logger.info(f"📋 Returning {len(conflicts)} known conflicts")
     return conflicts
@@ -641,11 +636,12 @@ async def save_product(product: Product):
             data = []
         
         # Create product object
+        import time
         new_product = {
             "title": product.title,
             "brand": product.brand,
             "ingredients": ",".join(product.ingredients) if isinstance(product.ingredients, list) else product.ingredients,
-            "sku": product.sku or f"prod-{Date.now()}"
+            "sku": product.sku or f"prod-{int(time.time() * 1000)}"
         }
         
         logger.info(f"✅ Product object: {new_product}")
