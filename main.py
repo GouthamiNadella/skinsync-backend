@@ -25,43 +25,23 @@ load_dotenv()
 
 app = FastAPI()
 
-# === ENHANCED CORS CONFIGURATION ===
-origins = [
-    "https://skinsync-frontend-e7zs.vercel.app",
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "*"
-]
-
+# Enhanced CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Custom middleware to ensure CORS headers on all responses
-@app.middleware("https")
+# Custom middleware to ensure CORS headers
+@app.middleware("http")
 async def add_cors_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "*"
     return response
-
-# Handle OPTIONS requests for CORS preflight
-@app.options("/{path:path}")
-async def options_handler(path: str):
-    return JSONResponse(
-        content={"message": "OK"},
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "true",
-        }
-    )
 
 # Configure Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -140,41 +120,34 @@ class ReviewRequest(BaseModel):
 # ===== ROOT ENDPOINT =====
 @app.get("/")
 def root():
-    return {
-        "message": "SkinSync API - Skincare Compatibility & Review Platform",
-        "version": "2.0.0",
-        "gemini_available": GENAI_AVAILABLE,
-        "cors_enabled": True,
-        "endpoints": {
-            "health": "/api/health",
-            "search": "/api/products/search?query=CeraVe",
-            "fetch_ingredients": "POST /api/fetch-ingredients",
-            "analyze": "POST /api/analyze-compatibility",
-            "conflicts": "/api/conflicts",
-            "generate_review": "POST /api/generate-review",
-            "product_image": "GET /api/product-image?product_name=..."
+    return JSONResponse(
+        content={
+            "message": "SkinSync API - Skincare Compatibility & Review Platform",
+            "version": "2.0.0",
+            "gemini_available": GENAI_AVAILABLE,
+            "endpoints": {
+                "health": "/api/health",
+                "search": "/api/products/search?query=CeraVe",
+                "fetch_ingredients": "POST /api/fetch-ingredients",
+                "analyze": "POST /api/analyze-compatibility",
+                "conflicts": "/api/conflicts",
+                "generate_review": "POST /api/generate-review",
+                "product_image": "GET /api/product-image?product_name=..."
+            }
         }
-    }
+    )
 
 # ===== HEALTH CHECK =====
 @app.get("/api/health")
 def health_check():
     """Check API status"""
-    return {
-        "status": "ok",
-        "message": "Skincare API is running",
-        "gemini_available": GENAI_AVAILABLE,
-        "database_loaded": len(products_db) > 0,
-        "products_count": len(products_db)
-    }
-
-# ===== TEST CORS ENDPOINT =====
-@app.get("/api/test-cors")
-async def test_cors():
     return JSONResponse(
-        content={"message": "CORS is working!", "status": "success"},
-        headers={
-            "Access-Control-Allow-Origin": "*",
+        content={
+            "status": "ok",
+            "message": "Skincare API is running",
+            "gemini_available": GENAI_AVAILABLE,
+            "database_loaded": len(products_db) > 0,
+            "products_count": len(products_db)
         }
     )
 
@@ -213,21 +186,11 @@ def search_products(query: str, limit: int = 20):
         results = exact_brand_matches + starts_with_matches + partial_matches
         logger.info(f"🔍 Search '{query}': found {len(results)} results")
         
-        return JSONResponse(
-            content=results[:limit],
-            headers={
-                "Access-Control-Allow-Origin": "*",
-            }
-        )
+        return JSONResponse(content=results[:limit])
         
     except Exception as e:
         logger.error(f"❌ Search error: {str(e)}")
-        return JSONResponse(
-            content=[],
-            headers={
-                "Access-Control-Allow-Origin": "*",
-            }
-        )
+        return JSONResponse(content=[])
 
 # ===== FETCH INGREDIENTS ENDPOINT =====
 @app.post("/api/fetch-ingredients")
@@ -273,7 +236,7 @@ Important: Return ONLY the JSON object, nothing else."""
 
         result = json.loads(response_text)
         logger.info(f"✅ Successfully fetched ingredients for: {product_name}")
-        return result
+        return JSONResponse(content=result)
 
     except json.JSONDecodeError as e:
         logger.error(f"❌ JSON parse error: {str(e)}")
@@ -341,11 +304,11 @@ Make it sound like advice from a knowledgeable friend. Be specific and helpful."
         
         logger.info(f"✅ Review generated for: {product_name}")
         
-        return {
+        return JSONResponse(content={
             "productName": product_name,
             "skinType": skin_type,
             "review": review_text
-        }
+        })
         
     except Exception as e:
         logger.error(f"❌ Error generating review: {str(e)}")
@@ -360,7 +323,7 @@ async def get_product_image(product_name: str):
     """Fetch product image from Google Custom Search"""
     if not GOOGLE_SEARCH_API_KEY or not GOOGLE_CSE_ID:
         logger.warning("⚠️ Google Search API credentials not set")
-        return {"imageUrl": None}
+        return JSONResponse(content={"imageUrl": None})
     
     try:
         logger.info(f"🔍 Fetching image for: {product_name}")
@@ -374,14 +337,14 @@ async def get_product_image(product_name: str):
         if data.get("items") and len(data["items"]) > 0:
             image_url = data["items"][0]["link"]
             logger.info(f"✅ Image found for: {product_name}")
-            return {"imageUrl": image_url}
+            return JSONResponse(content={"imageUrl": image_url})
         else:
             logger.warning(f"⚠️ No image found for: {product_name}")
-            return {"imageUrl": None}
+            return JSONResponse(content={"imageUrl": None})
             
     except Exception as e:
         logger.error(f"❌ Error fetching image: {str(e)}")
-        return {"imageUrl": None}
+        return JSONResponse(content={"imageUrl": None})
 
 # ===== ANALYZE COMPATIBILITY ENDPOINT =====
 @app.post("/api/analyze-compatibility")
@@ -390,7 +353,7 @@ async def analyze_compatibility(request: CompatibilityRequest) -> AnalysisRespon
     
     if not GENAI_AVAILABLE:
         logger.warning("⚠️ Gemini not available, returning fallback analysis")
-        return {
+        return JSONResponse(content={
             "explanation": "AI analysis unavailable. Returning heuristic guidance based on ingredient database.",
             "recommendations": [
                 "Introduce one active ingredient at a time",
@@ -401,7 +364,7 @@ async def analyze_compatibility(request: CompatibilityRequest) -> AnalysisRespon
             "warnings": ["AI service disabled - using basic analysis only"],
             "tips": "Install google-generativeai and set GEMINI_API_KEY to enable AI analysis.",
             "score": 3.0
-        }
+        })
 
     try:
         logger.info(f"🤖 Analyzing compatibility for {request.newProduct.brand} - {request.newProduct.title}")
@@ -468,11 +431,11 @@ Return ONLY valid JSON, no markdown or extra text:
 
         analysis = json.loads(response_text)
         logger.info(f"✅ Analysis complete for {request.newProduct.brand}")
-        return analysis
+        return JSONResponse(content=analysis)
 
     except json.JSONDecodeError as e:
         logger.error(f"❌ JSON parse error in analysis: {str(e)}")
-        return {
+        return JSONResponse(content={
             "explanation": "Unable to generate AI analysis at this moment. Basic heuristic analysis shows no critical conflicts.",
             "recommendations": [
                 "Monitor how your skin responds over 1-2 weeks",
@@ -482,10 +445,10 @@ Return ONLY valid JSON, no markdown or extra text:
             ],
             "warnings": [],
             "tips": "If irritation occurs, discontinue use and consult a dermatologist."
-        }
+        })
     except Exception as e:
         logger.error(f"❌ Error in compatibility analysis: {str(e)}")
-        return {
+        return JSONResponse(content={
             "explanation": "Unable to get AI analysis at this moment. Your product has been added to the routine.",
             "recommendations": [
                 "Monitor how your skin responds over 1-2 weeks",
@@ -494,7 +457,7 @@ Return ONLY valid JSON, no markdown or extra text:
             ],
             "warnings": [],
             "tips": "If irritation occurs, discontinue and consult a dermatologist."
-        }
+        })
 
 # ===== CONFLICTS ENDPOINT =====
 @app.get("/api/conflicts")
@@ -674,7 +637,7 @@ def get_conflicts() -> List[ConflictItem]:
         }
     ]
     logger.info(f"📋 Returning {len(conflicts)} known conflicts")
-    return conflicts
+    return JSONResponse(content=conflicts)
 
 @app.post("/api/products/save")
 async def save_product(product: Product):
@@ -711,11 +674,11 @@ async def save_product(product: Product):
         
         if product_exists:
             logger.warning(f"⚠️ Product already exists in database")
-            return {
+            return JSONResponse(content={
                 "status": "already_exists",
                 "message": f"{product.brand} - {product.title} already in database",
                 "product": new_product
-            }
+            })
         
         # Add to database
         data.append(new_product)
@@ -726,12 +689,12 @@ async def save_product(product: Product):
         
         logger.info(f"✅ Product saved successfully. Total products: {len(data)}")
         
-        return {
+        return JSONResponse(content={
             "status": "success",
             "message": f"Product saved: {product.brand} - {product.title}",
             "product": new_product,
             "total_products": len(data)
-        }
+        })
         
     except Exception as e:
         logger.error(f"❌ Error saving product: {str(e)}")
@@ -750,9 +713,18 @@ async def http_exception_handler(request, exc):
         content={
             "error": exc.detail,
             "status_code": exc.status_code
-        },
+        }
+    )
+
+# Add explicit OPTIONS handler for CORS preflight
+@app.options("/{path:path}")
+async def options_handler(path: str):
+    return JSONResponse(
+        content={"message": "OK"},
         headers={
             "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
         }
     )
 
