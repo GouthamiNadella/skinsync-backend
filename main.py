@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -24,7 +25,7 @@ load_dotenv()
 
 app = FastAPI()
 
-# Simple CORS configuration - allow all origins
+# === CRITICAL: CORS MIDDLEWARE MUST BE FIRST ===
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allow all origins
@@ -32,6 +33,16 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
 )
+
+# Additional middleware to ensure CORS headers on ALL responses
+@app.middleware("http")
+async def add_cors_header(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 # Configure Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -112,8 +123,10 @@ class ReviewRequest(BaseModel):
 def root():
     return {
         "message": "SkinSync API - Skincare Compatibility & Review Platform",
-        "version": "2.0.0",
+        "version": "2.2.0",
         "gemini_available": GENAI_AVAILABLE,
+        "cors_enabled": True,
+        "status": "running",
         "endpoints": {
             "health": "/api/health",
             "search": "/api/products/search?query=CeraVe",
@@ -126,6 +139,7 @@ def root():
     }
 
 # ===== HEALTH CHECK =====
+@app.get("/health")
 @app.get("/api/health")
 def health_check():
     """Check API status"""
@@ -139,38 +153,65 @@ def health_check():
 
 # ===== SEARCH ENDPOINT =====
 @app.get("/api/products/search")
-def search_products(query: str, limit: int = 20):
+def search_products(query: str = "", limit: int = 20):
     """Search products by name or brand"""
-    if not query or not query.strip() or len(query.strip()) < 2:
-        return []
+    logger.info(f"🔍 Search request received: '{query}'")
+    
+    try:
+        if not query or not query.strip() or len(query.strip()) < 2:
+            logger.info("Empty or too short query, returning empty array")
+            return JSONResponse(
+                content=[],
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Credentials": "true"
+                }
+            )
 
-    q = query.lower().strip()
-    exact_brand_matches = []
-    starts_with_matches = []
-    partial_matches = []
+        q = query.lower().strip()
+        exact_brand_matches = []
+        starts_with_matches = []
+        partial_matches = []
 
-    for product in products_db:
-        title = product.get('title', '').lower()
-        brand = product.get('brand', '').lower()
-        searchable = f"{title} {brand}"
+        for product in products_db:
+            title = product.get('title', '').lower()
+            brand = product.get('brand', '').lower()
+            searchable = f"{title} {brand}"
 
-        # Exact brand match gets highest priority
-        if brand == q:
-            exact_brand_matches.append(product)
-        # Title or brand starts with query
-        elif title.startswith(q) or brand.startswith(q):
-            starts_with_matches.append(product)
-        # Partial match anywhere
-        elif q in searchable:
-            partial_matches.append(product)
+            # Exact brand match gets highest priority
+            if brand == q:
+                exact_brand_matches.append(product)
+            # Title or brand starts with query
+            elif title.startswith(q) or brand.startswith(q):
+                starts_with_matches.append(product)
+            # Partial match anywhere
+            elif q in searchable:
+                partial_matches.append(product)
 
-        # Stop if we have enough results
-        if len(exact_brand_matches) + len(starts_with_matches) + len(partial_matches) >= limit:
-            break
+            # Stop if we have enough results
+            if len(exact_brand_matches) + len(starts_with_matches) + len(partial_matches) >= limit:
+                break
 
-    results = exact_brand_matches + starts_with_matches + partial_matches
-    logger.info(f"🔍 Search '{query}': found {len(results)} results")
-    return results[:limit]
+        results = exact_brand_matches + starts_with_matches + partial_matches
+        logger.info(f"✅ Search '{query}': found {len(results)} results")
+        
+        return JSONResponse(
+            content=results[:limit],
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Credentials": "true"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Search error: {str(e)}")
+        return JSONResponse(
+            content=[],
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Credentials": "true"
+            }
+        )
 
 # ===== FETCH INGREDIENTS ENDPOINT =====
 @app.post("/api/fetch-ingredients")
@@ -311,7 +352,7 @@ async def get_product_image(product_name: str):
         query = f"{product_name} official product image"
         url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_SEARCH_API_KEY}&cx={GOOGLE_CSE_ID}&searchType=image&num=1&q={query}"
         
-        response = requests.get(url)
+        response = requests.get(url, timeout=5)
         data = response.json()
         
         if data.get("items") and len(data["items"]) > 0:
@@ -683,12 +724,27 @@ async def save_product(product: Product):
             detail=f"Failed to save product: {str(e)}"
         )
 
-
 # ===== ERROR HANDLERS =====
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
     logger.error(f"❌ HTTP Exception: {exc.detail}")
-    return {
-        "error": exc.detail,
-        "status_code": exc.status_code
-    }
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.detail, "status_code": exc.status_code},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Credentials": "true"
+        }
+    )
+
+# ===== STARTUP/SHUTDOWN EVENTS =====
+@app.on_event("startup")
+async def startup_event():
+    logger.info("🚀 SkinSync API Server started successfully")
+    logger.info(f"📊 Loaded {len(products_db)} products from database")
+    logger.info(f"🤖 Gemini AI available: {GENAI_AVAILABLE}")
+    logger.info(f"🌐 CORS enabled for all origins")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("🛑 SkinSync API Server shutting down")
