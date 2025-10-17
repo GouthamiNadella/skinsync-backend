@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import json
@@ -25,24 +25,43 @@ load_dotenv()
 
 app = FastAPI()
 
-# === CRITICAL: CORS MIDDLEWARE MUST BE FIRST ===
+# === ENHANCED CORS CONFIGURATION ===
+origins = [
+    "https://skinsync-frontend-e7zs.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "*"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 
-# Additional middleware to ensure CORS headers on ALL responses
+# Custom middleware to ensure CORS headers on all responses
 @app.middleware("http")
-async def add_cors_header(request: Request, call_next):
+async def add_cors_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "*"
     return response
+
+# Handle OPTIONS requests for CORS preflight
+@app.options("/{path:path}")
+async def options_handler(path: str):
+    return JSONResponse(
+        content={"message": "OK"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+        }
+    )
 
 # Configure Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -123,10 +142,9 @@ class ReviewRequest(BaseModel):
 def root():
     return {
         "message": "SkinSync API - Skincare Compatibility & Review Platform",
-        "version": "2.2.0",
+        "version": "2.0.0",
         "gemini_available": GENAI_AVAILABLE,
         "cors_enabled": True,
-        "status": "running",
         "endpoints": {
             "health": "/api/health",
             "search": "/api/products/search?query=CeraVe",
@@ -139,7 +157,6 @@ def root():
     }
 
 # ===== HEALTH CHECK =====
-@app.get("/health")
 @app.get("/api/health")
 def health_check():
     """Check API status"""
@@ -151,22 +168,23 @@ def health_check():
         "products_count": len(products_db)
     }
 
+# ===== TEST CORS ENDPOINT =====
+@app.get("/api/test-cors")
+async def test_cors():
+    return JSONResponse(
+        content={"message": "CORS is working!", "status": "success"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+        }
+    )
+
 # ===== SEARCH ENDPOINT =====
 @app.get("/api/products/search")
-def search_products(query: str = "", limit: int = 20):
+def search_products(query: str, limit: int = 20):
     """Search products by name or brand"""
-    logger.info(f"🔍 Search request received: '{query}'")
-    
     try:
         if not query or not query.strip() or len(query.strip()) < 2:
-            logger.info("Empty or too short query, returning empty array")
-            return JSONResponse(
-                content=[],
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Credentials": "true"
-                }
-            )
+            return JSONResponse(content=[])
 
         q = query.lower().strip()
         exact_brand_matches = []
@@ -193,13 +211,12 @@ def search_products(query: str = "", limit: int = 20):
                 break
 
         results = exact_brand_matches + starts_with_matches + partial_matches
-        logger.info(f"✅ Search '{query}': found {len(results)} results")
+        logger.info(f"🔍 Search '{query}': found {len(results)} results")
         
         return JSONResponse(
             content=results[:limit],
             headers={
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Credentials": "true"
             }
         )
         
@@ -209,7 +226,6 @@ def search_products(query: str = "", limit: int = 20):
             content=[],
             headers={
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Credentials": "true"
             }
         )
 
@@ -352,7 +368,7 @@ async def get_product_image(product_name: str):
         query = f"{product_name} official product image"
         url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_SEARCH_API_KEY}&cx={GOOGLE_CSE_ID}&searchType=image&num=1&q={query}"
         
-        response = requests.get(url, timeout=5)
+        response = requests.get(url)
         data = response.json()
         
         if data.get("items") and len(data["items"]) > 0:
@@ -724,27 +740,23 @@ async def save_product(product: Product):
             detail=f"Failed to save product: {str(e)}"
         )
 
+
 # ===== ERROR HANDLERS =====
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
     logger.error(f"❌ HTTP Exception: {exc.detail}")
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": exc.detail, "status_code": exc.status_code},
+        content={
+            "error": exc.detail,
+            "status_code": exc.status_code
+        },
         headers={
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Credentials": "true"
         }
     )
 
-# ===== STARTUP/SHUTDOWN EVENTS =====
-@app.on_event("startup")
-async def startup_event():
-    logger.info("🚀 SkinSync API Server started successfully")
-    logger.info(f"📊 Loaded {len(products_db)} products from database")
-    logger.info(f"🤖 Gemini AI available: {GENAI_AVAILABLE}")
-    logger.info(f"🌐 CORS enabled for all origins")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("🛑 SkinSync API Server shutting down")
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
